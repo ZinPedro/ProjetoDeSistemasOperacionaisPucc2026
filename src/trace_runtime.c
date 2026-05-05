@@ -52,7 +52,18 @@ static pid_t launch_tracee(char *const argv[])
      *
      * Em erro, imprima uma mensagem com perror() e retorne -1.
      */
-    fprintf(stderr, "erro: TODO Semana 2: implementar launch_tracee()\n");
+
+    pid_t pid = fork();
+    if (pid == 0){
+        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+        raise(SIGSTOP);
+        execvp(argv[0], argv);
+    }
+    if(pid > 0){
+        return pid;
+    }
+
+    perror("Erro de fork ou execv na launch_trace"); 
     return -1;
 }
 
@@ -66,7 +77,26 @@ static int wait_for_initial_stop(pid_t child)
      *
      * Retorne 0 se o filho parou como esperado, -1 em erro.
      */
-    fprintf(stderr, "erro: TODO Semana 2: implementar wait_for_initial_stop()\n");
+    int status;
+     
+    waitpid(child, &status, 0);
+
+     if(WIFEXITED(status)){
+        fprintf("Erro: Filho terminou antes do SIGSTOP")
+        return -1;
+     }
+     if(WIFSIGNALED(status)){
+        fprintf("Erro: Filho morreu por sinal")
+        return -1;
+     }
+     
+     if(WIFSTOPPED(status)){
+        if((WSTOPSIG(status) == SIGSTOP)){
+            return 0; //falta implementação semana 3
+        }
+        return 0;
+     }
+
     return -1;
 }
 
