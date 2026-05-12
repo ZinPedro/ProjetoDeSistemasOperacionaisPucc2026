@@ -82,21 +82,21 @@ static int wait_for_initial_stop(pid_t child)
     waitpid(child, &status, 0);
 
      if(WIFEXITED(status)){
-        fprintf("Erro: Filho terminou antes do SIGSTOP")
+        fprintf(stderr, "Erro: Filho terminou antes do SIGSTOP");
         return -1;
      }
      if(WIFSIGNALED(status)){
-        fprintf("Erro: Filho morreu por sinal")
+        fprintf(stderr, "Erro: Filho morreu por sinal");
         return -1;
      }
      
      if(WIFSTOPPED(status)){
-        if((WSTOPSIG(status) == SIGSTOP)){
-            return 0; //falta implementação semana 3
+        if((WSTOPSIG(status) & 0x80)){
+            return 0;
         }
-        return 0;
      }
 
+     fprintf(stderr, "Erro: Processo parou por motivo desconhecido");
     return -1;
 }
 
@@ -108,8 +108,13 @@ static int configure_trace_options(pid_t child)
      * Configure PTRACE_O_TRACESYSGOOD com PTRACE_SETOPTIONS.
      * Isso ajuda a diferenciar paradas de syscall de outros sinais.
      */
-    fprintf(stderr, "erro: TODO Semana 3: implementar configure_trace_options()\n");
-    return -1;
+     if(ptrace(PTRACE_SETOPTIONS, child, NULL, PTRACE_O_TRACESYSGOOD) == 0){
+        return 0;
+     }
+     fprintf(stderr, "Erro Configurações de Trace (PTRACE_O_TRACYSGOOD)");
+     return -1;
+    
+    
 }
 
 static int resume_until_next_syscall(pid_t child, int signal_to_deliver)
@@ -122,8 +127,11 @@ static int resume_until_next_syscall(pid_t child, int signal_to_deliver)
      *
      * signal_to_deliver deve ser repassado como quarto argumento do ptrace.
      */
-    fprintf(stderr, "erro: TODO Semana 3: implementar resume_until_next_syscall()\n");
-    return -1;
+     if(ptrace(PTRACE_SYSCALL, child, NULL, signal_to_deliver) == 0){
+            return 0;
+     }
+     fprintf(stderr, "Erro Configurações de Syscall (PTRACE_SYSCALL)");
+     return -1;
 }
 
 static int wait_for_syscall_stop(pid_t child, int *status)
@@ -144,7 +152,30 @@ static int wait_for_syscall_stop(pid_t child, int *status)
      * - com PTRACE_O_TRACESYSGOOD, syscall-stops aparecem com bit 0x80.
      * - paradas SIGTRAP comuns nao devem ser entregues de volta ao filho.
      */
-    fprintf(stderr, "erro: TODO Semana 3: implementar wait_for_syscall_stop()\n");
+
+    int signal;
+     
+    waitpid(child, status, 0);
+
+     if(WIFEXITED(*status)){
+        return 0;
+     }
+     if(WIFSIGNALED(*status)){
+        return 0;
+     }
+
+     signal = WIFSTOPPED(*status);
+     
+     if(signal){
+        if((WSTOPSIG(status) & 0x80)){
+            return 1;
+        }
+        return 0;
+     }
+
+     resume_until_next_syscall(child, signal);
+
+     fprintf(stderr, "Erro: Processo parou por motivo desconhecido");
     return -1;
 }
 
