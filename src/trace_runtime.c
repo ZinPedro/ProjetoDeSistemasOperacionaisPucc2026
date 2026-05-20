@@ -29,9 +29,38 @@ static void fill_event_from_regs(pid_t pid,
      * - os seis argumentos ficam em rdi, rsi, rdx, r10, r8 e r9.
      * - ev->entering deve copiar o parametro entering.
      */
-    memset(ev, 0, sizeof(*ev));
+
+    ev->syscall_no = regs->orig_rax;
+   
+    ev->args[0] = regs -> rdi;
+    ev->args[1] = regs -> rsi;
+    ev->args[2] = regs -> rdx;
+    ev->args[3] = regs -> r10;
+    ev->args[4] = regs -> r8;
+    ev->args[5] = regs -> r9;
+
+
+    ev->syscall_no = regs->orig_rax;
+   
+    ev->args[0] = regs -> rdi;
+    ev->args[1] = regs -> rsi;
+    ev->args[2] = regs -> rdx;
+    ev->args[3] = regs -> r10;
+    ev->args[4] = regs -> r8;
+    ev->args[5] = regs -> r9;
+
     ev->pid = pid;
     ev->entering = entering;
+    if(ev->entering == 0){
+         ev->ret = regs->rax;
+    }else{
+        ev->ret = 0;
+    }
+    if(ev->entering == 0){
+         ev->ret = regs->rax;
+    }else{
+        ev->ret = 0;
+    }
 }
 
 static pid_t launch_tracee(char *const argv[])
@@ -78,25 +107,18 @@ static int wait_for_initial_stop(pid_t child)
      * Retorne 0 se o filho parou como esperado, -1 em erro.
      */
     int status;
-     
-    waitpid(child, &status, 0);
 
-     if(WIFEXITED(status)){
-        fprintf(stderr, "Erro: Filho terminou antes do SIGSTOP");
+    if(waitpid(child, &status, 0) < 0){
+        perror("waitpid < 0\n");
         return -1;
-     }
-     if(WIFSIGNALED(status)){
-        fprintf(stderr, "Erro: Filho morreu por sinal");
-        return -1;
-     }
-     
-     if(WIFSTOPPED(status)){
-        if((WSTOPSIG(status) & 0x80)){
-            return 0;
-        }
-     }
+    }
 
-     fprintf(stderr, "Erro: Processo parou por motivo desconhecido");
+    if(WIFSTOPPED(status)){
+        return 0;
+    }
+
+
+    fprintf(stderr, "Erro: Processo parou por motivo desconhecido");
     return -1;
 }
 
@@ -108,6 +130,13 @@ static int configure_trace_options(pid_t child)
      * Configure PTRACE_O_TRACESYSGOOD com PTRACE_SETOPTIONS.
      * Isso ajuda a diferenciar paradas de syscall de outros sinais.
      */
+     if(ptrace(PTRACE_SETOPTIONS, child, NULL, PTRACE_O_TRACESYSGOOD) == 0){
+        return 0;
+     }
+     fprintf(stderr, "Erro Configurações de Trace (PTRACE_O_TRACYSGOOD)");
+     return -1;
+    
+    
      if(ptrace(PTRACE_SETOPTIONS, child, NULL, PTRACE_O_TRACESYSGOOD) == 0){
         return 0;
      }
@@ -127,6 +156,11 @@ static int resume_until_next_syscall(pid_t child, int signal_to_deliver)
      *
      * signal_to_deliver deve ser repassado como quarto argumento do ptrace.
      */
+     if(ptrace(PTRACE_SYSCALL, child, NULL, signal_to_deliver) == 0){
+            return 0;
+     }
+     fprintf(stderr, "Erro Configurações de Syscall (PTRACE_SYSCALL)");
+     return -1;
      if(ptrace(PTRACE_SYSCALL, child, NULL, signal_to_deliver) == 0){
             return 0;
      }
@@ -167,7 +201,8 @@ static int wait_for_syscall_stop(pid_t child, int *status)
      signal = WIFSTOPPED(*status);
      
      if(signal){
-        if((WSTOPSIG(status) & 0x80)){
+
+        if((WSTOPSIG(*status) & 0x80)){
             return 1;
         }
         return 0;
@@ -227,14 +262,24 @@ int trace_program(char *const argv[],
             }
             return 0;
         }
-
         /*
          * TODO Semana 4:
          *
          * Use PTRACE_GETREGS para preencher regs.
          * Depois chame fill_event_from_regs() e observer().
          */
-        memset(&regs, 0, sizeof(regs));
+        
+        if (ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0) {
+            perror("ptrace PTRACE_GETREGS");
+            return -1;
+        }
+        
+        
+        if (ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0) {
+            perror("ptrace PTRACE_GETREGS");
+            return -1;
+        }
+        
         fill_event_from_regs(child, entering, &regs, &ev);
         if (observer != NULL) {
             observer(&ev, userdata);
